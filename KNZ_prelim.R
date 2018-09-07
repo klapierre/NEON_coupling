@@ -238,7 +238,14 @@ allData <- beetleSummary%>%full_join(birdSummary)%>%full_join(mammalSummary)%>%f
 
 
 ##############################
-### 
+### get correlation coefficients
+allCorrelation <- as.matrix(allData[,-1])%>% 
+  cor%>% #calculate all possible correlations
+  as.data.frame%>%
+  rownames_to_column(var = 'var1')%>%
+  gather(var2, value, -var1)%>%
+  mutate(drop=ifelse(var1==var2, 1, 0))%>%
+  filter(drop==0)
 
 
 
