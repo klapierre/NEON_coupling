@@ -17,6 +17,9 @@ library(geoNEON) #uses neon spatial data
 library(rhdf5)
 library(raster)
 library(codyn)
+library(Hmisc)
+library(network)
+library(igraph)
 library(tidyverse)
 options(stringsAsFactors = F) #turns off default that makes any strings into factors
 
@@ -27,7 +30,8 @@ load_data <- function(path) {
   do.call(rbind, tables)
 }
 
-setwd('C:\\Users\\la pierrek\\Dropbox (Smithsonian)\\grants\\NSF_FY2019\\NSF_ecosystems_FY2018\\NEON_KNZ_data')
+# setwd('C:\\Users\\la pierrek\\Dropbox (Smithsonian)\\grants\\NSF_FY2019\\NSF_ecosystems_FY2018\\NEON_KNZ_data')
+# setwd('C:\\Users\\lapie\\Dropbox (Smithsonian)\\grants\\NSF_FY2019\\NSF_ecosystems_FY2018\\NEON_KNZ_data')
 
 
 ##############################
@@ -239,19 +243,83 @@ allData <- beetleSummary%>%full_join(birdSummary)%>%full_join(mammalSummary)%>%f
 
 ##############################
 ### get correlation coefficients
-allCorrelation <- as.matrix(allData[,-1])%>% 
-  cor%>% #calculate all possible correlations
+
+#get p values
+pMatrix <- as.matrix(allData[,-1])%>% 
+  rcorr(type='pearson') #calculate all possible correlations to get p values
+p <- allMatrix$P
+p[upper.tri(p, diag=T)] <- 'NA'
+
+allP <- p%>%
   as.data.frame%>%
   rownames_to_column(var = 'var1')%>%
   gather(var2, value, -var1)%>%
-  mutate(drop=ifelse(var1==var2, 1, 0))%>%
-  filter(drop==0)
+  rename(p=value)
+allMatrix <- as.matrix(allData[,-1])%>% 
+  cor(method='pearson') #calculate all possible correlation
+allMatrix[upper.tri(allMatrix, diag=T)] <- 'NA'
+
+#get pearson correlation coefficients
+allCorrelation <- allMatrix%>%
+  as.data.frame%>%
+  rownames_to_column(var = 'var1')%>%
+  gather(var2, value, -var1)%>%
+  rename(pearson=value)%>%
+  left_join(allP)%>% #join with p-values
+  filter(pearson!='NA')%>%
+  mutate(pearson_sig=ifelse(p>0.05, 0, pearson))
+
+#get list of nodes
+nodes <- allCorrelation%>%
+  mutate(label=as.character(var1))%>%
+  select(label)%>%
+  unique()%>%
+  rowid_to_column('id')
+nodes[nrow(nodes)+1,] = list(42,'beetle_count') #add in beetle_count, which is the one variable not in var1 column (but is in var 2 column)
+
+#get list of edge strengths
+edges <- allCorrelation%>%
+  left_join(nodes, by=c('var1'='label'))%>%
+  select(-var1)%>%
+  mutate(var1=as.integer(id))%>%
+  select(-id)%>%
+  left_join(nodes, by=c('var2'='label'))%>%
+  select(-var2)%>%
+  mutate(var2=as.integer(ifelse(!is.na(id), id, 19)))%>%
+  select(var1, var2, pearson_sig)%>%
+  filter(pearson_sig!=0)
 
 
 
-#prelim regression plots
-ggplot(data=beetleSummary, aes(x=beetle_count, y=beetle_richness)) + geom_point() + geom_smooth(method='lm', se=F)
-ggplot(data=birdSummary, aes(x=bird_count, y=bird_richness)) + geom_point() + geom_smooth(method='lm', se=F)
-ggplot(data=mammalSummary, aes(x=mammal_count, y=mammal_richness)) + geom_point() + geom_smooth(method='lm', se=F)
+###plot network
+network <- network(edges, vertex.attr=nodes, matrix.type='edgelist', ignore.eval=T)
+
+plot.network(network, mode='circle', usearrows=F, vertex.cex=2, vertex.col='grey', edge.lwd=1, edge.col='dark grey')
+
+
+###prelim regression plots
+theme_set(theme_bw())
+theme_update(axis.title.x=element_text(size=20, vjust=-0.35), axis.text.x=element_text(size=16),
+             axis.title.y=element_text(size=20, angle=90, vjust=0.5), axis.text.y=element_text(size=16),
+             plot.title = element_text(size=24, vjust=2),
+             panel.grid.major=element_blank(), panel.grid.minor=element_blank(),
+             legend.title=element_blank(), legend.text=element_text(size=20))
+
+ggplot(data=allData, aes(x=LMA, y=beetle_richness)) + #sig
+  geom_point() + 
+  geom_smooth(method='lm', se=F, color='black') +
+  xlab('Leaf Mass Area') + ylab('Ground Beetle Richness') +
+  annotate("text", x=52, y=3.4, label='r = 0.919\np = 0.003')
+
+ggplot(data=allData, aes(x=LMA, y=beetle_count)) + #non-sig
+  geom_point() + 
+  xlab('Leaf Mass Area') + ylab('Ground Beetle Abundance')
+
+ggplot(data=allData, aes(x=soil_ph, y=soil_P)) + #sig
+  geom_point() + 
+  geom_smooth(method='lm', se=F, color='black') +
+  xlab('Soil pH') + ylab('Soil P') +
+  annotate("text", x=6.2, y=275, label='r = 0.763\np = 0.046')
+
 
 
