@@ -306,8 +306,8 @@ theme_update(axis.title.x=element_text(size=20, vjust=-0.35), axis.text.x=elemen
              legend.title=element_blank(), legend.text=element_text(size=20))
 
 ggplot(data=allData, aes(x=LMA, y=beetle_richness)) + #sig
-  geom_point() + 
-  geom_smooth(method='lm', se=F, color='black') +
+  geom_point(color='dark blue') + 
+  geom_smooth(method='lm', se=F, color='dark blue') +
   xlab('Leaf Mass Area') + ylab('Ground Beetle Richness') +
   annotate("text", x=52, y=3.4, label='r = 0.919\np = 0.003')
 
@@ -316,8 +316,8 @@ ggplot(data=allData, aes(x=LMA, y=beetle_count)) + #non-sig
   xlab('Leaf Mass Area') + ylab('Ground Beetle Abundance')
 
 ggplot(data=allData, aes(x=soil_ph, y=soil_P)) + #sig
-  geom_point() + 
-  geom_smooth(method='lm', se=F, color='black') +
+  geom_point(color='dark orange') + 
+  geom_smooth(method='lm', se=F, color='dark orange') +
   xlab('Soil pH') + ylab('Soil P') +
   annotate("text", x=6.2, y=275, label='r = 0.763\np = 0.046')
 
