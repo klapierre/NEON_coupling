@@ -163,7 +163,7 @@ rm(foliarCNRaw, foliarElementsRaw, ligninRaw, lmaRaw, all=T)
 
 ##############################
 ### plant data
-plantRaw <- load_data("NEON_presence-cover-plant")%>%  #load in all mammal count data and get sum by species and plot
+plantRaw <- load_data("NEON_presence-cover-plant")%>%  #load in all plant and get sum by species and plot
   filter(divDataType=='plantSpecies')%>% #filter out all non-plant stuff (like water, rock, etc)
   separate(col=endDate, into=c('year', 'month', 'day'))%>% #split the sampling date into components to get years
   group_by(plotID, subplotID, year, taxonID)%>%
@@ -171,7 +171,7 @@ plantRaw <- load_data("NEON_presence-cover-plant")%>%  #load in all mammal count
   ungroup()
 
 #calculate plant relative cover
-plantTotalCover <- plantRaw%>%  #load in all mammal count data and get sum by species and plot
+plantTotalCover <- plantRaw%>% 
   group_by(plotID, subplotID, year)%>%
   summarise(total_cover=sum(cover))%>% #get total percent cover for each subplot for each year
   ungroup()
@@ -245,9 +245,8 @@ allData <- beetleSummary%>%full_join(birdSummary)%>%full_join(mammalSummary)%>%f
 ### get correlation coefficients
 
 #get p values
-pMatrix <- as.matrix(allData[,-1])%>% 
-  rcorr(type='pearson') #calculate all possible correlations to get p values
-p <- allMatrix$P
+pMatrix <- rcorr(as.matrix(allData[,-1]), type='pearson') #calculate all possible correlations to get p values
+p <- pMatrix$P
 p[upper.tri(p, diag=T)] <- 'NA'
 
 allP <- p%>%
@@ -269,13 +268,22 @@ allCorrelation <- allMatrix%>%
   filter(pearson!='NA')%>%
   mutate(pearson_sig=ifelse(p>0.05, 0, pearson))
 
+#calculate average correlation coefficient
+avgCorrelationSig <- mean(abs(as.numeric(allCorrelation$pearson_sig)))
+avgCorrelation <- mean(abs(as.numeric(allCorrelation$pearson)))
+
+##############################
+### make figures
+
 #get list of nodes
 nodes <- allCorrelation%>%
   mutate(label=as.character(var1))%>%
   select(label)%>%
   unique()%>%
-  rowid_to_column('id')
-nodes[nrow(nodes)+1,] = list(42,'beetle_count') #add in beetle_count, which is the one variable not in var1 column (but is in var 2 column)
+  rowid_to_column('id')%>%
+  mutate(type=ifelse(label=='beetle_richness', 'beetle', ifelse(label=='bird_count'|label=='bird_richness', 'bird', ifelse(label=='mammal_count'|label=='mammal_richness', 'mammal', ifelse(label=='soil_ph'|label=='soil_C'|label=='soil_N'|label=='soil_organic_content'|label=='soil_Su'|label=='soil_Al'|label=='soil_Fe'|label=='soil_Mn'|label=='soil_P'|label=='soil_Si'|label=='soil_sand'|label=='soil_silt'|label=='soil_clay'|label=='soil_frag_2to5'|label=='soil_frag_5to20', 'soil', 'plant')))))%>%
+  mutate(color=ifelse(type=='soil', '#c00000', ifelse(type=='plant', '#00b050', ifelse(type=='beetle', '#ed7d31', ifelse(type=='mammal', '#4472c4', '#a325a3')))))
+nodes[nrow(nodes)+1,] = list(42,'beetle_count', 'beetle', '#ed7d31') #add in beetle_count, which is the one variable not in var1 column (but is in var 2 column)
 
 #get list of edge strengths
 edges <- allCorrelation%>%
@@ -294,32 +302,60 @@ edges <- allCorrelation%>%
 ###plot network
 network <- network(edges, vertex.attr=nodes, matrix.type='edgelist', ignore.eval=T)
 
-plot.network(network, mode='circle', usearrows=F, vertex.cex=2, vertex.col='grey', edge.lwd=1, edge.col='dark grey')
+plot.network(network, mode='circle', usearrows=F, vertex.cex=2, vertex.col=nodes$color, edge.lwd=1, edge.col='#626363')
 
 
 ###prelim regression plots
 theme_set(theme_bw())
-theme_update(axis.title.x=element_text(size=20, vjust=-0.35), axis.text.x=element_text(size=16),
-             axis.title.y=element_text(size=20, angle=90, vjust=0.5), axis.text.y=element_text(size=16),
+theme_update(axis.title.x=element_text(size=30, vjust=-0.8), axis.text.x=element_text(size=25),
+             axis.title.y=element_text(size=30, angle=90, vjust=0.7, margin=margin(l=0,r=10,t=0,b=0)), axis.text.y=element_text(size=25),
              plot.title = element_text(size=24, vjust=2),
              panel.grid.major=element_blank(), panel.grid.minor=element_blank(),
              legend.title=element_blank(), legend.text=element_text(size=20))
 
 ggplot(data=allData, aes(x=LMA, y=beetle_richness)) + #sig
-  geom_point(color='dark blue') + 
-  geom_smooth(method='lm', se=F, color='dark blue') +
-  xlab('Leaf Mass Area') + ylab('Ground Beetle Richness') +
-  annotate("text", x=52, y=3.4, label='r = 0.919\np = 0.003')
+  geom_point(color='#c17313', size=5) + 
+  geom_smooth(method='lm', se=F, color='#c17313', size=2) +
+  xlab('Leaf Mass Area') + ylab('Ground Beetle\nRichness') +
+  annotate("text", x=52, y=3.42, label='r = 0.919\np = 0.003', size=6)
+#export at 600x400
 
 ggplot(data=allData, aes(x=LMA, y=beetle_count)) + #non-sig
-  geom_point() + 
-  xlab('Leaf Mass Area') + ylab('Ground Beetle Abundance')
+  geom_point(color='#60605e', size=5) + 
+  xlab('Leaf Mass Area') + ylab('Ground Beetle\nAbundance')
+#export at 600x400
 
 ggplot(data=allData, aes(x=soil_ph, y=soil_P)) + #sig
-  geom_point(color='dark orange') + 
-  geom_smooth(method='lm', se=F, color='dark orange') +
-  xlab('Soil pH') + ylab('Soil P') +
-  annotate("text", x=6.2, y=275, label='r = 0.763\np = 0.046')
+  geom_point(color='#c00000', size=5) + 
+  geom_smooth(method='lm', se=F, color='#c00000', size=2) +
+  xlab('Soil pH') + ylab('\nSoil P') +
+  annotate("text", x=6.2, y=275, label='r = 0.763\np = 0.046', size=6)
+#export at 600x400
 
 
 
+#hypothesized pattern figure
+coupling = rnorm(42, mean=0.35, sd=0.15)
+
+#net ecosystem exchange
+sigma2 = n*800
+eps = rnorm(coupling,mean=0,sd=sqrt(sigma2))
+net_ecosystem_exchange = -60+150*coupling + eps
+simData <- data.frame(coupling, net_ecosystem_exchange)
+
+ggplot(data=simData, aes(x=coupling, y=net_ecosystem_exchange)) +
+  geom_point(color='black', size=5) + 
+  xlab('Ecosystem Coupling') + ylab('Net Ecosystem\nExchange') +
+  geom_smooth(method='lm', se=F, color='black')
+
+
+#net ecosystem exchange
+sigma2 = n*0.04
+eps = rnorm(coupling,mean=0,sd=sqrt(sigma2))
+ecosystem_stability = 0+coupling + eps
+simData <- data.frame(coupling, ecosystem_stability)
+
+ggplot(data=simData, aes(x=coupling, y=abs(ecosystem_stability))) +
+  geom_point(color='black', size=5) + 
+  xlab('Ecosystem Coupling') + ylab('Ecosystem\nStability') +
+  geom_smooth(method='lm', se=F, color='black')
