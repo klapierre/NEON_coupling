@@ -30,8 +30,8 @@ load_data <- function(path) {
   do.call(rbind, tables)
 }
 
-# setwd('C:\\Users\\la pierrek\\Dropbox (Smithsonian)\\grants\\NSF_FY2019\\NSF_ecosystems_FY2018\\NEON_KNZ_data')
-# setwd('C:\\Users\\lapie\\Dropbox (Smithsonian)\\grants\\NSF_FY2019\\NSF_ecosystems_FY2018\\NEON_KNZ_data')
+# setwd('C:\\Users\\la pierrek\\Dropbox (Smithsonian)\\grants\\NSF_FY2018\\NSF_ecosystems_FY2018\\NEON_KNZ_data')
+# setwd('C:\\Users\\lapie\\Dropbox (Smithsonian)\\grants\\NSF_FY2018\\NSF_ecosystems_FY2018\\NEON_KNZ_data')
 
 
 ##############################
@@ -322,7 +322,8 @@ ggplot(data=allData, aes(x=LMA, y=beetle_richness)) + #sig
 
 ggplot(data=allData, aes(x=LMA, y=beetle_count)) + #non-sig
   geom_point(color='#60605e', size=5) + 
-  xlab('Leaf Mass Area') + ylab('Ground Beetle\nAbundance')
+  xlab('Leaf Mass Area') + ylab('Ground Beetle\nAbundance') +
+  annotate("text", x=73, y=6, label='r = 0.189\np = 0.685', size=6)
 #export at 600x400
 
 ggplot(data=allData, aes(x=soil_ph, y=soil_P)) + #sig
@@ -336,17 +337,19 @@ ggplot(data=allData, aes(x=soil_ph, y=soil_P)) + #sig
 
 #hypothesized pattern figure
 coupling = rnorm(42, mean=0.35, sd=0.15)
+n=40 #we expect to have 40 sites
 
 #net ecosystem exchange
 sigma2 = n*800
 eps = rnorm(coupling,mean=0,sd=sqrt(sigma2))
-net_ecosystem_exchange = -60+150*coupling + eps
+net_ecosystem_exchange = -600+1500*coupling + eps
 simData <- data.frame(coupling, net_ecosystem_exchange)
 
 ggplot(data=simData, aes(x=coupling, y=net_ecosystem_exchange)) +
   geom_point(color='black', size=5) + 
-  xlab('Ecosystem Coupling') + ylab('Net Ecosystem\nExchange') +
+  xlab('Ecosystem Coupling') + ylab(bquote('NEE (gC'~m^-2~y^-1*')')) +
   geom_smooth(method='lm', se=F, color='black')
+#600x400
 
 
 #net ecosystem exchange
@@ -359,3 +362,4 @@ ggplot(data=simData, aes(x=coupling, y=abs(ecosystem_stability))) +
   geom_point(color='black', size=5) + 
   xlab('Ecosystem Coupling') + ylab('Ecosystem\nStability') +
   geom_smooth(method='lm', se=F, color='black')
+#600x400
