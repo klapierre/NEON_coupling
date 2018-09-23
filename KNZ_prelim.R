@@ -12,14 +12,12 @@
 # install_github("NEONScience/NEON-geolocation/geoNEON")
 # biocLite("rhdf5")
 
-library(neonUtilities) #includes stackByTable, zipsByProduct
-library(geoNEON) #uses neon spatial data
-library(rhdf5)
-library(raster)
+# library(neonUtilities) #includes stackByTable, zipsByProduct
 library(codyn)
 library(Hmisc)
 library(network)
 library(igraph)
+library(nos)
 library(tidyverse)
 options(stringsAsFactors = F) #turns off default that makes any strings into factors
 
@@ -158,7 +156,7 @@ lmaRaw <- read.csv('NEON_chem-phys-foliar\\NEON.D06.KONZ.DP1.10026.001.cfc_LMA.2
 #merge foliar chemistry data
 foliarChemistrySummary <- foliarCNRaw%>%left_join(foliarElementsRaw)%>%left_join(ligninRaw)%>%left_join(lmaRaw)%>%
   mutate(plotID=ifelse(plotID=='KONZ_010', 'KONZ_006', ifelse(plotID=='KONZ_007', 'KONZ_005', plotID))) #changes plotID for the two plots that are most closely adjacent to where the corresponding bird and base plots are
-rm(foliarCNRaw, foliarElementsRaw, ligninRaw, lmaRaw, all=T)
+rm(foliarCNRaw, foliarElementsRaw, ligninRaw, lmaRaw)
 
 
 ##############################
@@ -190,8 +188,7 @@ plantRelativeCover <- plantRaw%>%
 #calculate plant richness and evenness in each plot
 plantRichnessEvenness <- plantRelativeCover%>% #this might need rethinking, because a couple plots have multiple measures across years, so could be artifically inflating richness
   community_structure(abundance.var='plant_cover', replicate.var='plotID')%>%
-  mutate(plant_richness=richness, plant_evenness=Evar)%>%
-  select(-richness, -Evar)
+  rename(plant_richness=richness, plant_evenness=Evar)
 
 #plant PCA to get first two axes for all plots
 plantWide <- plantRelativeCover%>%
@@ -266,11 +263,28 @@ allCorrelation <- allMatrix%>%
   rename(pearson=value)%>%
   left_join(allP)%>% #join with p-values
   filter(pearson!='NA')%>%
-  mutate(pearson_sig=ifelse(p>0.05, 0, pearson))
+  mutate(pearson_sig=ifelse(p>0.05, 0, pearson))%>%
+  mutate(count_sig=ifelse(pearson_sig!=0, 1, 0))
+  
+#count of significant correlations (p<0.1)
+numCorrelationSig <- allCorrelation%>%filter(pearson_sig!=0)
 
-#calculate average correlation coefficient
-avgCorrelationSig <- mean(abs(as.numeric(allCorrelation$pearson_sig)))
-avgCorrelation <- mean(abs(as.numeric(allCorrelation$pearson)))
+#calculate average correlation coefficient - ecosystem coupling
+avgCorrelationSig <- mean(abs(as.numeric(numCorrelationSig$pearson_sig)))
+# avgCorrelation <- mean(abs(as.numeric(allCorrelation$pearson)))
+
+#calculate connectance
+connectance <- sum(as.numeric(allCorrelation$count_sig))/length(allCorrelation$count_sig)
+
+#calculate linkage density
+linkageMatrix <- rcorr(as.matrix(allData[,-1]), type='pearson') #calculate all possible correlations to get p values
+linkageDensity <- as.data.frame(linkageMatrix$P)%>%
+  mutate_all(funs(ifelse(.<0.05, 1, 0)))%>%
+  replace(., is.na(.), 0)%>%
+  mutate(num_links=rowSums(.[1:42]))
+linkageDensity <- sum(linkageDensity$num_links)/length(linkageDensity$num_links)
+
+
 
 ##############################
 ### make figures
@@ -286,7 +300,7 @@ nodes <- allCorrelation%>%
 nodes[nrow(nodes)+1,] = list(42,'beetle_count', 'beetle', '#ed7d31') #add in beetle_count, which is the one variable not in var1 column (but is in var 2 column)
 
 #get list of edge strengths
-edges <- allCorrelation%>%
+allEdges <- allCorrelation%>%
   left_join(nodes, by=c('var1'='label'))%>%
   select(-var1)%>%
   mutate(var1=as.integer(id))%>%
@@ -294,13 +308,18 @@ edges <- allCorrelation%>%
   left_join(nodes, by=c('var2'='label'))%>%
   select(-var2)%>%
   mutate(var2=as.integer(ifelse(!is.na(id), id, 19)))%>%
-  select(var1, var2, pearson_sig)%>%
+  select(var1, var2, pearson_sig)
+
+sigEdges <- edges%>%
   filter(pearson_sig!=0)
+
+#calculate nestedness
+summary(nestedness <- NOSM_POT_undir(sigEdges[,1:2], allEdges[,1:2], perc = 1, sl = 0))
 
 
 
 ###plot network
-network <- network(edges, vertex.attr=nodes, matrix.type='edgelist', ignore.eval=T)
+network <- network(sigEdges, vertex.attr=nodes, matrix.type='edgelist', ignore.eval=T)
 
 plot.network(network, mode='circle', usearrows=F, vertex.cex=2, vertex.col=nodes$color, edge.lwd=1, edge.col='#626363')
 
